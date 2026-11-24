@@ -21,10 +21,7 @@
 use ad_sdk::canvas::{AdSurface, R2_COPYPEN, R2_XORPEN, ROP_SRCCOPY};
 use ad_sdk::palette::rgb;
 use ad_sdk::{AdContext, AdControl, AdMetadata, AdModule, AdResult, MsvcRand};
-use windows_sys::Win32::Foundation::RECT;
-use windows_sys::Win32::Graphics::Gdi::{
-    BitBlt, CreateSolidBrush, DeleteObject, FillRect, FrameRect, HGDIOBJ, InvertRect, StretchBlt,
-};
+use ad_sdk::canvas::RECT;
 
 /// Exact 16-entry palette at `STAINED.AD` `DS:0x006A..0x00C9` (6-byte 16-bit RGB entries, high bytes used).
 const PALETTE_0: [u32; 16] = [
@@ -492,11 +489,7 @@ impl StainedGlassModule {
     fn fill_rect_color(&self, surface: &mut AdSurface, r: RectI, color: u32) {
         let rc = self.to_dev_rect(r);
         if rc.left < rc.right && rc.top < rc.bottom {
-            unsafe {
-                let hbr = CreateSolidBrush(color);
-                FillRect(surface.hdc(), &rc, hbr);
-                DeleteObject(hbr as HGDIOBJ);
-            }
+            surface.fill_rect_rgb(rc.left, rc.top, rc.right, rc.bottom, color);
         }
     }
 
@@ -504,11 +497,7 @@ impl StainedGlassModule {
     fn frame_rect_color(&self, surface: &mut AdSurface, r: RectI, color: u32) {
         let rc = self.to_dev_rect(r);
         if rc.left < rc.right && rc.top < rc.bottom {
-            unsafe {
-                let hbr = CreateSolidBrush(color);
-                FrameRect(surface.hdc(), &rc, hbr);
-                DeleteObject(hbr as HGDIOBJ);
-            }
+            surface.frame_rect_rgb(rc.left, rc.top, rc.right, rc.bottom, color);
         }
     }
 
@@ -516,9 +505,7 @@ impl StainedGlassModule {
     fn invert_rect(&self, surface: &mut AdSurface, r: RectI) {
         let rc = self.to_dev_rect(r);
         if rc.left < rc.right && rc.top < rc.bottom {
-            unsafe {
-                InvertRect(surface.hdc(), &rc);
-            }
+            surface.invert_rect(rc.left, rc.top, rc.right, rc.bottom);
         }
     }
 
@@ -1002,34 +989,10 @@ impl StainedGlassModule {
         if sw <= 0 || sh <= 0 || dw <= 0 || dh <= 0 {
             return;
         }
-        unsafe {
-            if sw == dw && sh == dh {
-                BitBlt(
-                    surface.hdc(),
-                    d.left,
-                    d.top,
-                    sw,
-                    sh,
-                    surface.hdc(),
-                    s.left,
-                    s.top,
-                    ROP_SRCCOPY,
-                );
-            } else {
-                StretchBlt(
-                    surface.hdc(),
-                    d.left,
-                    d.top,
-                    dw,
-                    dh,
-                    surface.hdc(),
-                    s.left,
-                    s.top,
-                    sw,
-                    sh,
-                    ROP_SRCCOPY,
-                );
-            }
+        if sw == dw && sh == dh {
+            surface.bit_blt_self(d.left, d.top, sw, sh, s.left, s.top, ROP_SRCCOPY);
+        } else {
+            surface.stretch_blt_self(d.left, d.top, dw, dh, s.left, s.top, sw, sh, ROP_SRCCOPY);
         }
     }
 

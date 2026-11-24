@@ -5,8 +5,6 @@ use ad_sdk::canvas::{AdBitmap, AdSurface, ROP_SRCCOPY};
 use ad_sdk::palette::rgb;
 use ad_sdk::sound::Tone;
 use ad_sdk::{AdContext, AdControl, AdMetadata, AdModule, AdResult, SaverMode};
-use windows_sys::Win32::Foundation::SYSTEMTIME;
-use windows_sys::Win32::System::SystemInformation::GetLocalTime;
 
 // Exact original bitmaps extracted from CLOCKS.AD (RT_BITMAP #1..#14)
 const BMP_MODERN: &[u8] = include_bytes!("../../../assets/clocks/RT_BITMAP_#1.bmp");
@@ -174,10 +172,7 @@ impl ClocksModule {
     }
 
     fn local_hms() -> (i32, i32, i32) {
-        let mut st: SYSTEMTIME = unsafe { std::mem::zeroed() };
-        unsafe {
-            GetLocalTime(&mut st);
-        }
+        let st = ad_sdk::sys::local_time();
         (st.wHour as i32, st.wMinute as i32, st.wSecond as i32)
     }
 

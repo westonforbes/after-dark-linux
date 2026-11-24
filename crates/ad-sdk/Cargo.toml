@@ -3,14 +3,10 @@ name = "ad-sdk"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Modernized Win64 Rust After Dark 1.0a Module SDK (1:1 MODULE.H / RES_IDS.H + GDI Canvas + Sound + Prefs + C-ABI)"
+description = "Linux Rust After Dark 1.0a Module SDK (1:1 MODULE.H / RES_IDS.H + software GDI canvas + sound + prefs + C-ABI)"
 
 [dependencies]
-windows-sys = { version = "0.59", features = [
-    "Win32_Foundation",
-    "Win32_Graphics_Gdi",
-    "Win32_Media",
-    "Win32_Media_Audio",
-    "Win32_System_LibraryLoader",
-    "Win32_UI_WindowsAndMessaging",
-] }
+fontdue = "0.9"
+libc = "0.2"
+libloading = "0.9"
+rustysynth = "1.3"

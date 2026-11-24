@@ -5,7 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
-use windows_sys::Win32::Foundation::RECT;
+use ad_sdk::canvas::RECT;
 
 use ad_sdk::canvas::{AdSurface, ROP_SRCCOPY};
 use ad_sdk::palette::rgb;

@@ -1,13 +1,14 @@
-//! Modernized Win64 C-ABI plugin interface (`ad_module_v1`),
-//! preserving Berkeley Systems' original `ADMODULE.SDK` `Module(iMessage, hDrawDC, hADSystem)` design
-//! for 64-bit Windows 11 `.dll` screensaver modules!
+//! C-ABI plugin interface (`ad_module_v2`) for external shared-library (`.so`) modules,
+//! preserving Berkeley Systems' original `ADMODULE.SDK` `Module(iMessage, hDrawDC, hADSystem)` design.
+//!
+//! On Windows the draw target was an `HDC`. On Linux there is no GDI device context, so the module
+//! receives an [`AdCSurface`] describing the host's 32-bit `0x00RRGGBB` pixel buffer instead. The
+//! ABI version is 2 so that Windows-era (v1) plugins are rejected rather than misinterpreted.
 
-use std::ffi::{CStr, CString, c_char, c_int, c_void};
+use std::ffi::{CStr, c_char, c_int, c_void};
 use std::path::Path;
 
-use windows_sys::Win32::Foundation::{FreeLibrary, HMODULE};
-use windows_sys::Win32::Graphics::Gdi::HDC;
-use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
+use libloading::Library;
 
 use crate::{AdContext, AdControl, AdMetadata, AdModule, AdResult};
 
@@ -32,7 +33,21 @@ pub const RET_RGB_PAL: c_int = 11;
 pub const RET_WHITE_PAL: c_int = 12;
 pub const RET_PRIMARY_PAL: c_int = 13;
 
-/// C-ABI system + module parameter block passed to Win64 external `.dll` modules.
+/// Current plugin ABI version.
+pub const AD_ABI_VERSION: u32 = 2;
+
+/// Draw target passed to plugins in place of the Win16 `hDrawDC`.
+/// `pixels[y * stride + x]` is the `0x00RRGGBB` pixel at `(x, y)`.
+#[repr(C)]
+pub struct AdCSurface {
+    pub pixels: *mut u32,
+    pub width: c_int,
+    pub height: c_int,
+    /// Row stride in pixels (not bytes).
+    pub stride: c_int,
+}
+
+/// C-ABI system + module parameter block passed to external `.so` modules.
 #[repr(C)]
 pub struct AdCModuleState {
     pub abi_version: u32,
@@ -47,7 +62,7 @@ pub struct AdCModuleState {
     pub user_data: *mut c_void,
 }
 
-/// C-ABI metadata returned by `ad_module_metadata_v1()`.
+/// C-ABI metadata returned by `ad_module_metadata_v2()`.
 #[repr(C)]
 pub struct AdCMetadata {
     pub abi_version: u32,
@@ -57,41 +72,35 @@ pub struct AdCMetadata {
     pub target_frame_ms: u32,
 }
 
-pub type AdModuleEntryFn = unsafe extern "C" fn(c_int, HDC, *mut AdCModuleState) -> c_int;
+pub type AdModuleEntryFn = unsafe extern "C" fn(c_int, *mut AdCSurface, *mut AdCModuleState) -> c_int;
 pub type AdModuleMetaFn = unsafe extern "C" fn() -> AdCMetadata;
 
-/// Dynamically loaded Win64 `.dll` module built against the modernized `ad-sdk` C-ABI.
-pub struct DynamicDllModule {
-    hmod: HMODULE,
+/// Dynamically loaded shared-library module built against the `ad-sdk` C-ABI.
+pub struct DynamicModule {
+    // Keeps the library mapped for as long as `entry` may be called.
+    _lib: Library,
     entry: AdModuleEntryFn,
     meta: AdMetadata,
     state: AdCModuleState,
 }
 
-unsafe impl Send for DynamicDllModule {}
+/// Backwards-compatible name from the Windows port.
+pub type DynamicDllModule = DynamicModule;
 
-impl DynamicDllModule {
+// SAFETY: the plugin contract requires modules to be callable from the host's render thread;
+// all calls go through `&mut self`, so they are never concurrent.
+unsafe impl Send for DynamicModule {}
+
+impl DynamicModule {
     pub fn load(path: &Path) -> Option<Self> {
-        let mut wide: Vec<u16> = path.as_os_str().to_string_lossy().encode_utf16().collect();
-        wide.push(0);
+        // SAFETY: loading a plugin runs its initializers; plugins are trusted code the user
+        // placed in their modules directory, exactly like the Windows `.dll` modules.
         unsafe {
-            let hmod = LoadLibraryW(wide.as_ptr());
-            if hmod.is_null() {
-                return None;
-            }
-            let entry_sym = CString::new("ad_module_entry_v1").ok()?;
-            let meta_sym = CString::new("ad_module_metadata_v1").ok()?;
-            let entry_ptr = GetProcAddress(hmod, entry_sym.as_ptr() as *const u8);
-            let meta_ptr = GetProcAddress(hmod, meta_sym.as_ptr() as *const u8);
-            let (Some(ep), Some(mp)) = (entry_ptr, meta_ptr) else {
-                FreeLibrary(hmod);
-                return None;
-            };
-            let entry: AdModuleEntryFn = std::mem::transmute(ep);
-            let meta_fn: AdModuleMetaFn = std::mem::transmute(mp);
+            let lib = Library::new(path).ok()?;
+            let entry: AdModuleEntryFn = *lib.get::<AdModuleEntryFn>(b"ad_module_entry_v2\0").ok()?;
+            let meta_fn: AdModuleMetaFn = *lib.get::<AdModuleMetaFn>(b"ad_module_metadata_v2\0").ok()?;
             let cmeta = meta_fn();
-            if cmeta.abi_version != 1 {
-                FreeLibrary(hmod);
+            if cmeta.abi_version != AD_ABI_VERSION {
                 return None;
             }
             let read_cstr = |p: *const c_char| -> String {
@@ -104,13 +113,14 @@ impl DynamicDllModule {
             let filename = path
                 .file_name()
                 .map(|s| s.to_string_lossy().into_owned())
-                .unwrap_or_else(|| "PLUGIN.DLL".to_string());
+                .unwrap_or_else(|| "plugin.so".to_string());
             let name = read_cstr(cmeta.name);
             let id = format!(
-                "dll_{}",
+                "so_{}",
                 filename
                     .to_ascii_lowercase()
-                    .trim_end_matches(".dll")
+                    .trim_start_matches("lib")
+                    .trim_end_matches(".so")
             );
             let meta = AdMetadata {
                 id,
@@ -131,11 +141,11 @@ impl DynamicDllModule {
                 target_frame_ms: cmeta.target_frame_ms.max(16),
             };
             Some(Self {
-                hmod,
+                _lib: lib,
                 entry,
                 meta,
                 state: AdCModuleState {
-                    abi_version: 1,
+                    abi_version: AD_ABI_VERSION,
                     screen_width: 0,
                     screen_height: 0,
                     rgn_width: 0,
@@ -159,7 +169,15 @@ impl DynamicDllModule {
         self.state.saver_mode = ctx.system.saver_mode as c_int;
         self.state.control_value = ctx.module.control_value;
         self.state.elapsed_ms = ctx.elapsed_ms;
-        let code = unsafe { (self.entry)(msg, ctx.surface.hdc(), &mut self.state) };
+        let (width, height) = (ctx.surface.width, ctx.surface.height);
+        let mut target = AdCSurface {
+            pixels: ctx.surface.pixels_mut().as_mut_ptr(),
+            width,
+            height,
+            stride: width,
+        };
+        // SAFETY: `target` points at a live, correctly sized buffer for the duration of the call.
+        let code = unsafe { (self.entry)(msg, &mut target, &mut self.state) };
         match code {
             RET_NOERROR => AdResult::NoError,
             RET_MEM_ERROR => AdResult::MemError,
@@ -174,7 +192,7 @@ impl DynamicDllModule {
     }
 }
 
-impl AdModule for DynamicDllModule {
+impl AdModule for DynamicModule {
     fn metadata(&self) -> AdMetadata {
         self.meta.clone()
     }
@@ -197,15 +215,5 @@ impl AdModule for DynamicDllModule {
 
     fn do_close(&mut self, ctx: &mut AdContext<'_>) -> AdResult {
         self.dispatch(MSG_CLOSE, ctx)
-    }
-}
-
-impl Drop for DynamicDllModule {
-    fn drop(&mut self) {
-        unsafe {
-            if !self.hmod.is_null() {
-                FreeLibrary(self.hmod);
-            }
-        }
     }
 }

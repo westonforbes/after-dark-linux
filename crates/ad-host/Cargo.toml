@@ -3,7 +3,7 @@ name = "ad-host"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "After Dark 1.0a Windows 11 native host (Control Panel, Tray, Hot Corners, Multi-Monitor, HiDPI)"
+description = "After Dark for Linux: control panel, idle daemon, and fullscreen multi-monitor saver runtime"
 
 [[bin]]
 name = "after-dark"
@@ -12,18 +12,8 @@ path = "src/main.rs"
 [dependencies]
 ad-sdk = { path = "../ad-sdk" }
 ad-modules = { path = "../ad-modules" }
-windows-sys = { version = "0.59", features = [
-    "Win32_Foundation",
-    "Win32_Graphics_Dwm",
-    "Win32_Graphics_Gdi",
-    "Win32_System_Com",
-    "Win32_System_LibraryLoader",
-    "Win32_System_SystemInformation",
-    "Win32_UI_Controls",
-    "Win32_UI_Controls_Dialogs",
-    "Win32_UI_HiDpi",
-    "Win32_UI_Input_KeyboardAndMouse",
-    "Win32_UI_Shell",
-    "Win32_UI_Shell_Common",
-    "Win32_UI_WindowsAndMessaging",
-] }
+eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
+libc = "0.2"
+softbuffer = "0.4"
+winit = "0.30"
+x11rb = { version = "0.13", features = ["randr", "screensaver", "xkb"] }

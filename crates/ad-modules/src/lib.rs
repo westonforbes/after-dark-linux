@@ -52,7 +52,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use ad_blanker_sdk_example::BlankerModule;
-use ad_sdk::ffi::DynamicDllModule;
+use ad_sdk::ffi::DynamicModule;
 use ad_sdk::{AdMetadata, AdModule};
 
 use aqua::AquaticRealmModule;
@@ -132,14 +132,14 @@ use worms::WormsModule;
 use wrap::WrapAroundModule;
 use zot::ZotModule;
 
-/// Descriptor for an available module (built-in decompiled Rust module or external Win64 `.dll`).
+/// Descriptor for an available module (built-in decompiled Rust module or external `.so` plugin).
 #[derive(Debug, Clone)]
 pub struct ModuleCatalogEntry {
     pub meta: AdMetadata,
     pub external_dll: Option<PathBuf>,
 }
 
-/// Build the full sorted catalog of built-in modules plus any external Win64 SDK `.dll` plugins
+/// Build the full sorted catalog of built-in modules plus any external SDK `.so` plugins
 /// placed in `plugin_dir`.
 pub fn build_catalog(plugin_dir: Option<&Path>) -> Vec<ModuleCatalogEntry> {
     let mut entries = vec![
@@ -231,10 +231,10 @@ pub fn build_catalog(plugin_dir: Option<&Path>) -> Vec<ModuleCatalogEntry> {
                 let p = entry.path();
                 if p.extension()
                     .and_then(|e| e.to_str())
-                    .map(|e| e.eq_ignore_ascii_case("dll"))
+                    .map(|e| e.eq_ignore_ascii_case("so"))
                     .unwrap_or(false)
                 {
-                    if let Some(dll_mod) = DynamicDllModule::load(&p) {
+                    if let Some(dll_mod) = DynamicModule::load(&p) {
                         entries.push(ModuleCatalogEntry {
                             meta: dll_mod.metadata(),
                             external_dll: Some(p),
@@ -343,14 +343,14 @@ pub fn create_module_by_id(
     }
 }
 
-/// Instantiate any module from a catalog entry (built-in or dynamic `.dll`).
+/// Instantiate any module from a catalog entry (built-in or dynamic `.so`).
 pub fn instantiate_entry(
     entry: &ModuleCatalogEntry,
     randomizer_pool: &[String],
     per_module_controls: &BTreeMap<String, [i32; 4]>,
 ) -> Option<Box<dyn AdModule>> {
     if let Some(ref dll_path) = entry.external_dll {
-        return DynamicDllModule::load(dll_path).map(|m| Box::new(m) as Box<dyn AdModule>);
+        return DynamicModule::load(dll_path).map(|m| Box::new(m) as Box<dyn AdModule>);
     }
     create_module_by_id(&entry.meta.id, randomizer_pool, per_module_controls)
 }

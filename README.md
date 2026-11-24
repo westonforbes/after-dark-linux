@@ -1,6 +1,6 @@
-# After Dark v2.5 — Windows 11 Native Rust Port (77 Built-in Screensavers)
+# After Dark v2.5 for Linux — Native Rust Port (77 Built-in Screensavers)
 
-A complete **disassembly- & resource-backed native Win64 Rust port** (`windows-sys`) of **Berkeley Systems' After Dark** for Windows 11, uniting **all 77 classic screensaver modules** across four legendary collections into a single standalone executable (`after-dark.exe`) with full **16:9 HD / 4K widescreen scaling** and **pixel-verified 1991–1995 animations**:
+A complete **disassembly- & resource-backed native Rust port** of **Berkeley Systems' After Dark** for **Linux** (X11 and Wayland), uniting **all 77 classic screensaver modules** across four legendary collections into a single executable (`after-dark`) with full **16:9 HD / 4K widescreen scaling** and **pixel-verified 1991–1995 animations**. It is a fork of the Windows 11 port: the decompiled modules are unchanged, running on a pure-Rust re-implementation of the Win16/Win32 GDI drawing model.
 
 - **Classic After Dark 1.0a (1991)** — **37 modules** (all 34 `.AD` modules, both `AD.EXE` built-in savers, and the `ADMODULE.SDK` Blanker sample)
 - **The Simpsons After Dark (1994)** — **15 modules** (2,647 `RLEP` frames, 12,175 `OFst`/`OFtb` compound poses, 87 digitized cast voice clips, 9 polyphonic MIDI songs)
@@ -52,6 +52,62 @@ A complete **disassembly- & resource-backed native Win64 Rust port** (`windows-s
 | Modules 61–70 | Modules 71–77 |
 | :---: | :---: |
 | ![Modules 61-70](docs/screenshots/sheet_7.png) | ![Modules 71-77](docs/screenshots/sheet_8.png) |
+
+---
+
+## Linux Port
+
+### Install
+
+Requirements: a Rust toolchain (`cargo`, edition 2024), and at runtime an X11 or Wayland desktop. No `-dev` packages are needed to build: X11 is spoken natively (`x11rb`), and audio libraries (PulseAudio/PipeWire, or ALSA) are loaded at runtime.
+
+```sh
+./install.sh            # builds a release binary and installs it into ~/.local, enables the idle daemon at login
+./install.sh --uninstall
+```
+
+Then open **After Dark** from your applications menu (or run `after-dark`).
+
+Optional but recommended: a General MIDI SoundFont for the Simpsons / Star Trek / Looney Tunes music (Debian/Ubuntu: `timgm6mb-soundfont` or `fluid-soundfont-gm`; set `AD_SOUNDFONT=/path/to/file.sf2` to pick one). Without one, a small built-in synthesizer plays the songs.
+
+### How it fits together
+
+| Command | Role |
+|---|---|
+| `after-dark` | **Control Panel** — choose a module, tweak its controls with a live **Demo**, Setup (timeout, hot corners, hotkey, scaling, multi-monitor, frame rate, audio), Randomizer, Messages / GraphStat editors. |
+| `after-dark daemon` | **Idle monitor** (the Windows app's resident role): starts the saver after the timeout, on the *Sleep Now* hot corner, or on the Sleep Now hotkey (default **Ctrl+Shift+S**). Started at login via `~/.config/autostart/after-dark-daemon.desktop`. Re-reads settings whenever the Control Panel saves them, and respects session idle inhibitors (video playback, presentations). |
+| `after-dark run [--module ID]` | Run the saver now. Any key, click, or mouse move beyond 12 px wakes it; hold **Shift** while it starts to just blank the screen. |
+| `after-dark sleep-now` | Same as `run` with the selected module — bind it to a custom keyboard shortcut on Wayland. |
+| `after-dark list` | List module ids. |
+
+Settings live in `~/.config/after-dark/` (`AD_PREFS.INI`, `RANDOM.ADS`, `MESSAGES.ADS`, `GRAFSTAT.TXT`, in the original 1991 formats). External plugin modules go in `~/.local/share/after-dark/modules/*.so`.
+
+**GNOME / KDE screen blanking**: the desktop's own blank-screen timer still applies. Set it (GNOME: *Settings → Power → Screen Blank*) longer than After Dark's timeout, or to *Never*, so you get to see the toasters.
+
+**xscreensaver**: every module can also run as an xscreensaver hack. Add lines like these to the `programs:` list in `~/.xscreensaver`:
+
+```
+"Flying Toasters"   after-dark run --module toasters --root \n\
+"Starry Night"      after-dark run --module starry --root   \n\
+```
+
+(`--window-id XID` / `$XSCREENSAVER_WINDOW` are honoured; sound is muted in this mode.)
+
+### X11 vs. Wayland
+
+| Feature | X11 | Wayland |
+|---|---|---|
+| Fullscreen saver, all modules, multi-monitor | ✅ | ✅ |
+| Idle timeout | ✅ (MIT-SCREEN-SAVER) | ✅ GNOME / KDE (D-Bus) |
+| Desktop-effect modules on the live desktop (Taz, Puzzle, Fade Away, Borg, …) | ✅ real desktop snapshot | Classic Windows 3.x teal desktop instead (Wayland has no unprompted screen capture) |
+| Hot corners, Sleep Now hotkey, Shift-to-blank | ✅ | — (use `after-dark sleep-now` on a shortcut) |
+
+### What changed from the Windows port
+
+- **`ad-sdk` canvas**: Win32 GDI is replaced by a software GDI with the same API and semantics — all 256 ternary ROPs, the 16 ROP2 pen modes, monochrome-bitmap colorization via text/background colors, regions (union/intersect/xor/diff, clipping), GDI shape conventions (excluded right/bottom edges, `LineTo` end-pixel exclusion, NULL-pen quirks, counter-clockwise arcs/pies/chords, round-capped wide pens), `COLORONCOLOR` stretching, hatch & pattern brushes, and fontconfig-resolved text (`Arial` → Liberation Sans). Verified against the Windows-rendered contact sheets in `docs/screenshots/`.
+- **Audio**: `waveOut` / `midiOut` → a mixer thread on PulseAudio (or ALSA), with SoundFont MIDI (`rustysynth`).
+- **Plugins**: `.dll` → `.so`; the C ABI is now `ad_module_entry_v2(msg, AdCSurface*, state)` — the draw target is a pixel buffer instead of an `HDC` (see `crates/ad-blanker-sdk-example`).
+- **Host**: the Win32 Control Panel / tray app is split into the eframe Control Panel, the idle daemon, and the winit/softbuffer saver runtime. The system-tray icon was dropped (GNOME has no tray); the daemon plus autostart replaces its role.
 
 ---
 
@@ -112,7 +168,7 @@ A complete **disassembly- & resource-backed native Win64 Rust port** (`windows-s
 | Module | Original Binary | Highlights |
 |---|---|---|
 | **Aquatic Realm** | `AQUA.AD` | All 76 original sprites (angelfish, seahorses, butterflyfish, crabs, jellyfish, kelp, gravel), 40-fish school, bubbles & water-column depth |
-| **Blanker** | `ADMODULE.SDK` | Solid-black blanker + loadable external Win64 `.dll` SDK sample |
+| **Blanker** | `ADMODULE.SDK` | Solid-black blanker + loadable external `.so` plugin SDK sample |
 | **Can of Worms** | `WORMS.AD` | Rainbow segmented worms burrowing across the captured live desktop |
 | **Clocks** | `CLOCKS.AD` | All 14 original bitmaps (`Modern`, `Antique`, `Digital` 0–9), exact trig tables, PC-speaker tick & hourly chime |
 | **Down the Drain** | `DRAINO.AD` | Rotating spiral vortex draining the captured desktop into black |
@@ -157,13 +213,13 @@ A complete **disassembly- & resource-backed native Win64 Rust port** (`windows-s
 | **Simpsons Files** | `simpsons_files` | Springfield File cabinet with animated character folders, classic episode lists, and character illustrations |
 | **Grampa's Wisdom** | `simpsons_grampa` | Abe Simpson rambles from his purple armchair (`HSTR`)—standing up, sitting back down, reclining, drooling, and snoozing on a dream cloud with 21 digitized voice clips |
 | **Grass Skirts** | `simpsons_grass_skirts` | Homer & Ned Flanders mow striped lawns in their finest dresses/muumuus, dodging weeds, Krusty dolls & plutonium rods while Maggie toddles by |
-| **Homer Eats** | `simpsons_homer_eats` | Homer chomps bite holes out of your live Windows desktop or an `"AH FUDGE!"` chocolate bar while Marge stops by with chocolate syrup, sugar & sighs |
+| **Homer Eats** | `simpsons_homer_eats` | Homer chomps bite holes out of your live desktop or an `"AH FUDGE!"` chocolate bar while Marge stops by with chocolate syrup, sugar & sighs |
 | **How to Draw** | `simpsons_how_to_draw` | David Silverman's step-by-step animator's pencil & ink construction of Bart Simpson on a graph-paper drawing board |
-| **Itchy & Scratchy** | `simpsons_itchy_scratchy` | Classic multi-frame cartoon chase and mayhem skits directly on your live Windows desktop with the *Itchy & Scratchy* MIDI theme |
+| **Itchy & Scratchy** | `simpsons_itchy_scratchy` | Classic multi-frame cartoon chase and mayhem skits directly on your live desktop with the *Itchy & Scratchy* MIDI theme |
 | **Krusty** | `simpsons_krusty` | Multi-layer theater spotlight routines: juggling dolls/pins/pies/balls, unicycle, shadow puppets, smoking/coughing, pie-in-face & heckling tomatoes (`"Hey hey, kids!"`) |
 | **Lisa's Mood Swings** | `simpsons_lisa_moods` | Full-body spotlighted Lisa improvises Happy, Sad, and Angry saxophone solos surrounded by choreographed golden musical-note silhouettes (`LISA`) |
 | **Mr. Burns** | `simpsons_mr_burns` | Montgomery Burns and Smithers emerge from hidden office vaults & security monitor banks across your desktop (`"Excellent..."`) |
-| **Objets B'art** | `simpsons_objets_bart` | Bart sprays graffiti tags onto your live Windows desktop and sprints away from Principal Skinner, with Milhouse and Nelson (`"HA-HA!"`) cameos |
+| **Objets B'art** | `simpsons_objets_bart` | Bart sprays graffiti tags onto your live desktop and sprints away from Principal Skinner, with Milhouse and Nelson (`"HA-HA!"`) cameos |
 | **Simpsons Physics** | `simpsons_physics` | 19 Springfield character heads (Barney through Smithers) bouncing and colliding under configurable gravity & attraction with animated head-turns and reactions |
 | **Simpsons Clocks** | `simpsons_clocks` | 3 live animated wall clocks: **Duff Brewery** (Barney, Lenny, swinging doors, Homer recliner, neon & rat), **Krusty Pop-Eye** (forehead dial, roving/popping eyes, pendulum tongue & chime explosion), and **Maggie** (blinking eyes, pacifier & toddling Maggie) |
 | **Snowball I** | `simpsons_snowball` | Angel Snowball I flaps smoothly on ping-pong wings over clouds and a starry night sky |
@@ -176,16 +232,16 @@ A complete **disassembly- & resource-backed native Win64 Rust port** (`windows-s
 | **Counselor Troi** | `tng_troi` | Deanna Troi offering empathetic psychological counsel on the *Enterprise-D* bridge & Ten Forward |
 | **Data Dances** | `tng_data_dances` | Lt. Commander Data performing tap, rhumba, cha-cha, and foxtrot routines (`SONG_DATA_TAP`, `#10..#37`) on the Holodeck |
 | **Encounters** | `tng_encounters` | USS *Enterprise* NCC-1701-D encountering Romulan Warbirds, Klingon Birds-of-Prey, and Borg Cubes in deep space |
-| **Nanites** | `tng_nanites` | Evolving microscopic Nanites multiplying and assembling circuitry across your live Windows desktop |
+| **Nanites** | `tng_nanites` | Evolving microscopic Nanites multiplying and assembling circuitry across your live desktop |
 | **Officers' Review** | `tng_officers_review` | Interactive LCARS Starfleet Academy & Bridge Officer evaluation exam (`QERY`) with cast voice reactions |
 | **Personnel Files** | `tng_personnel_files` | LCARS Starfleet Personnel Database displaying animated crew dossiers for Picard, Riker, Data, Worf, Troi, Crusher & La Forge |
 | **Science Stations** | `tng_science_stations` | Animated LCARS bridge science consoles, Subspace/Warp Field telemetry, and sensor diagnostics |
 | **Starbase** | `tng_starbase` | Orbital Starbase space dock with arriving and departing Starfleet vessels, shuttles, and running lights |
 | **Starfleet Messages** | `tng_starfleet_messages` | Incoming LCARS Subspace Priority One transmissions and customizable Starfleet command dispatches |
 | **Tachyon** | `tng_tachyon` | Geometric tachyon particle detection fields and quantum wave-front interference ribbons |
-| **The Borg** | `tng_borg` | Borg drones beaming onto your live Windows desktop with green assimilation lasers and *"Resistance is futile"* |
+| **The Borg** | `tng_borg` | Borg drones beaming onto your live desktop with green assimilation lasers and *"Resistance is futile"* |
 | **Warp Effect** | `tng_warp_effect` | Relativistic starlight streaking into warp drive as Picard orders *"Engage!"* |
-| **Worf's Weapons** | `tng_worfs_weapons` | Lt. Worf & Alexander practicing with the Klingon bat'leth and phasers across your Windows desktop |
+| **Worf's Weapons** | `tng_worfs_weapons` | Lt. Worf & Alexander practicing with the Klingon bat'leth and phasers across your desktop |
 
 ### Collection 4: Looney Tunes After Dark (1995 — 12 Modules)
 
@@ -194,15 +250,15 @@ A complete **disassembly- & resource-backed native Win64 Rust port** (`windows-s
 | **ACME Home Shopping** | `looney_acme_shopping` | Wile E. Coyote's live TV shopping network pitching all 12 original ACME contraptions (`STR# #2000..#2006`) with Granny Operator Standing By |
 | **Cartoons 101** | `looney_cartoons_101` | Blueprint university lecture board teaching the 10 Cartoon Laws of Physics (`STR# #11000`) with Wile E. Coyote & Road Runner |
 | **Conducktor** | `looney_conducktor` | Maestro Daffy Duck conducting Verdi's *Anvil Chorus* (`#70`) and Tchaikovsky's *1812 Overture* (`#80`) with rising colored notes & falling safes |
-| **Desquetoppe D'Amour** | `looney_desquetoppe` | Pepé Le Pew wooingly bounding after Penelope Pussycat across your real Windows desktop with rising hearts and French romance |
+| **Desquetoppe D'Amour** | `looney_desquetoppe` | Pepé Le Pew wooingly bounding after Penelope Pussycat across your real desktop with rising hearts and French romance |
 | **Looney Messages** | `looney_messages` | Speedy Gonzales & Foghorn Leghorn delivering custom parchment banner messages (`"OUT TO LUNCH."`) in authentic `RLEP #7500` font |
-| **Marvin's Invasion** | `looney_marvins_invasion` | Marvin the Martian and Duck Dodgers in the 24½th Century dueling with disintegrator pistols over your live Windows desktop |
+| **Marvin's Invasion** | `looney_marvins_invasion` | Marvin the Martian and Duck Dodgers in the 24½th Century dueling with disintegrator pistols over your live desktop |
 | **Michigan J. Frog** | `looney_michigan_frog` | Spotlighted theater stage where Michigan J. Frog performs *"Hello! Ma Baby"* (`#10`) in top hat & cane—and croaks when caught |
-| **Putty Tat Splat!** | `looney_putty_tat` | Sylvester stalking Tweety Bird across your real Windows desktop until Tweety drinks Dr. Jekyll's Formula and turns into Monster Tweety |
+| **Putty Tat Splat!** | `looney_putty_tat` | Sylvester stalking Tweety Bird across your real desktop until Tweety drinks Dr. Jekyll's Formula and turns into Monster Tweety |
 | **Rabbitron** | `looney_rabbitron` | Retro arcade high-score cabinet (`B BUNNY 989,000 / E FUDD 14`) where Bugs Bunny outsmarts Elmer Fudd through teleporting doors |
-| **Taz Desktop** | `looney_taz_desktop` | Tasmanian Devil spinning across your real Windows desktop, chewing bite holes directly out of the screen and spitting out scraps |
+| **Taz Desktop** | `looney_taz_desktop` | Tasmanian Devil spinning across your real desktop, chewing bite holes directly out of the screen and spitting out scraps |
 | **Wockets' Wed Gware** | `looney_wockets` | Bugs, Daffy, Elmer & Yosemite Sam silhouetted at the bottom of the screen watching Looney Tunes character fireworks burst in the night sky |
-| **Yosemite Sam** | `looney_yosemite_sam` | Yosemite Sam bursting out of saloon doors directly onto your real Windows desktop and blasting six-shooter bullet holes |
+| **Yosemite Sam** | `looney_yosemite_sam` | Yosemite Sam bursting out of saloon doors directly onto your real desktop and blasting six-shooter bullet holes |
 
 ---
 
@@ -218,14 +274,12 @@ A complete **disassembly- & resource-backed native Win64 Rust port** (`windows-s
 
 ## Build, Verify & Run
 
-```powershell
+```sh
 cargo test --workspace
 cargo build --workspace --release
-.\target\release\after-dark.exe
+./target/release/after-dark
 ```
 
-`cargo test --workspace` executes automated rendering, audio/resource integrity, and pixel-variance checks across all **77 built-in modules** plus `AD_PREFS.INI`, `RANDOM.ADS`, `MESSAGES.ADS`, `GRAFSTAT.TXT`, and the external Win64 SDK `.dll` plugin, and exports all 16 visual contact sheets (8 catalog sheets + 8 16:9 HD collection sheets) to `target/verify_snapshots/`.
+`cargo test --workspace` executes automated rendering, audio/resource integrity, and pixel-variance checks across all **77 built-in modules** plus `AD_PREFS.INI`, `RANDOM.ADS`, `MESSAGES.ADS`, `GRAFSTAT.TXT`, and the software-GDI unit tests, and exports all 16 visual contact sheets (8 catalog sheets + 8 16:9 HD collection sheets) to `target/verify_snapshots/` — compare them with the Windows-rendered originals in `docs/screenshots/`.
 
-Optional CLI flags:
-- `--sleep` — Immediately engage fullscreen screensaver.
-- `--tray` — Start minimized to the System Tray.
+Set `AFTER_DARK_DEBUG=1` to have `after-dark daemon` log its idle decisions to stderr.

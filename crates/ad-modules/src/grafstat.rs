@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use windows_sys::Win32::Foundation::RECT;
+use ad_sdk::canvas::RECT;
 
 use ad_sdk::palette::rgb;
 use ad_sdk::{AdContext, AdControl, AdMetadata, AdModule, AdResult};

@@ -3,14 +3,10 @@ name = "ad-blanker-sdk-example"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Modernized Win64 port of Berkeley Systems' ADMODULE.SDK\\BLANKER sample module"
+description = "Linux port of Berkeley Systems' ADMODULE.SDK/BLANKER sample module"
 
 [lib]
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 ad-sdk = { path = "../ad-sdk" }
-windows-sys = { version = "0.59", features = [
-    "Win32_Foundation",
-    "Win32_Graphics_Gdi",
-] }
