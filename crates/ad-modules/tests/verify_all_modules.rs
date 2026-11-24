@@ -2,7 +2,7 @@
 //!
 //! Verifies:
 //! 1. Full 37-module catalog registration, unique IDs, and `RANDOM.ADS` / `MESSAGES.ADS` / `GRAFSTAT.TXT` round-trips
-//! 2. Headless Win32 GDI rendering of EVERY single one of the 37 modules (with a realistic synthetic
+//! 2. Headless software-GDI rendering of EVERY single one of the 37 modules (with a realistic synthetic
 //!    Windows 3.1 desktop pre-painted onto the surface so screen-effect modules like Fade Away, Down the Drain,
 //!    Puzzle, Punch Out, Spotlight, Mondrian, and Can of Worms visibly manipulate the desktop)
 //! 3. Non-trivial output assertions (all 36 visual modules alter pixels cleanly; Blanker blanks cleanly to black)
@@ -24,11 +24,7 @@ use ad_sdk::palette::{AdPalette, rgb};
 use ad_sdk::prefs::load_random_ads;
 use ad_sdk::sound::AdSound;
 use ad_sdk::{AdContext, AdModuleParams, AdResult, AdSystem, MsvcRand, SaverMode};
-use windows_sys::Win32::Foundation::RECT;
-use windows_sys::Win32::Graphics::Gdi::{
-    BitBlt, CreateFontW, DT_CENTER, DT_SINGLELINE, DT_VCENTER, DeleteObject, DrawTextW, HGDIOBJ,
-    SelectObject, SetBkMode, SetTextColor, TRANSPARENT,
-};
+use ad_sdk::canvas::RECT;
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -203,45 +199,16 @@ fn write_surface_png(surface: &AdSurface, path: &Path) {
 }
 
 fn draw_centered_label(surface: &mut AdSurface, x: i32, y: i32, w: i32, h: i32, text: &str) {
-    let mut wide_txt: Vec<u16> = text.encode_utf16().collect();
-    wide_txt.push(0);
-    let mut face: Vec<u16> = "Segoe UI\0".encode_utf16().collect();
-    unsafe {
-        let font = CreateFontW(
-            -15,
-            0,
-            0,
-            0,
-            700,
-            0,
-            0,
-            0,
-            1,
-            0,
-            0,
-            5,
-            0,
-            face.as_mut_ptr(),
-        );
-        let old = SelectObject(surface.hdc(), font as HGDIOBJ);
-        SetBkMode(surface.hdc(), TRANSPARENT as i32);
-        SetTextColor(surface.hdc(), rgb(240, 244, 255));
-        let mut rc = RECT {
-            left: x,
-            top: y,
-            right: x + w,
-            bottom: y + h,
-        };
-        DrawTextW(
-            surface.hdc(),
-            wide_txt.as_ptr(),
-            -1,
-            &mut rc,
-            DT_CENTER | DT_VCENTER | DT_SINGLELINE,
-        );
-        SelectObject(surface.hdc(), old);
-        DeleteObject(font as HGDIOBJ);
-    }
+    // DT_CENTER | DT_VCENTER | DT_SINGLELINE
+    let (_, th) = surface.measure_text_font("Segoe UI", -15, true, false, text);
+    let top = y + (h - th) / 2;
+    let rc = RECT {
+        left: x,
+        top,
+        right: x + w,
+        bottom: top + th,
+    };
+    surface.draw_text_font("Segoe UI", -15, true, false, false, rgb(240, 244, 255), rc, true, false, text);
 }
 
 #[test]
@@ -474,19 +441,7 @@ fn verify_all_65_modules_and_render_contact_sheets() {
             draw_centered_label(&mut sheet, x, y, tile_w, hdr_h, &label);
 
             // Tile border + image
-            unsafe {
-                BitBlt(
-                    sheet.hdc(),
-                    x,
-                    y + hdr_h,
-                    tile_w,
-                    tile_h,
-                    tile.hdc(),
-                    0,
-                    0,
-                    ROP_SRCCOPY,
-                );
-            }
+            sheet.bit_blt_surface(x, y + hdr_h, tile_w, tile_h, &tile, 0, 0, ROP_SRCCOPY);
             sheet.rectangle(
                 x - 1,
                 y - 1,
@@ -593,19 +548,7 @@ fn verify_all_65_modules_and_render_contact_sheets() {
                 hdr_h,
                 &format!("{} ({}) — 16:9 HD", name, id),
             );
-            unsafe {
-                BitBlt(
-                    sheet.hdc(),
-                    x,
-                    y + hdr_h,
-                    sim_w,
-                    sim_h,
-                    tile.hdc(),
-                    0,
-                    0,
-                    ROP_SRCCOPY,
-                );
-            }
+            sheet.bit_blt_surface(x, y + hdr_h, sim_w, sim_h, &tile, 0, 0, ROP_SRCCOPY);
         }
         write_surface_png(&sheet, &snap_dir.join(format!("simpsons_sheet_{}.png", si + 1)));
     }
@@ -694,19 +637,7 @@ fn verify_all_65_modules_and_render_contact_sheets() {
             let y = pad + r * t_cell_h;
             sheet.fill_rect_rgb(x, y, x + tng_w, y + hdr_h, rgb(155, 85, 195));
             draw_centered_label(&mut sheet, x, y, tng_w, hdr_h, &format!("{} ({}) — 16:9 HD", name, id));
-            unsafe {
-                BitBlt(
-                    sheet.hdc(),
-                    x,
-                    y + hdr_h,
-                    tng_w,
-                    tng_h,
-                    tile.hdc(),
-                    0,
-                    0,
-                    ROP_SRCCOPY,
-                );
-            }
+            sheet.bit_blt_surface(x, y + hdr_h, tng_w, tng_h, &tile, 0, 0, ROP_SRCCOPY);
         }
         write_surface_png(&sheet, &snap_dir.join(format!("tng_sheet_{}.png", si + 1)));
     }
@@ -795,19 +726,7 @@ fn verify_all_65_modules_and_render_contact_sheets() {
                 hdr_h,
                 &format!("{} ({}) — 16:9 HD", name, id),
             );
-            unsafe {
-                BitBlt(
-                    sheet.hdc(),
-                    x,
-                    y + hdr_h,
-                    sim_w,
-                    sim_h,
-                    tile.hdc(),
-                    0,
-                    0,
-                    ROP_SRCCOPY,
-                );
-            }
+            sheet.bit_blt_surface(x, y + hdr_h, sim_w, sim_h, &tile, 0, 0, ROP_SRCCOPY);
         }
         write_surface_png(&sheet, &snap_dir.join(format!("looney_sheet_{}.png", si + 1)));
     }
@@ -891,19 +810,7 @@ fn verify_all_65_modules_and_render_contact_sheets() {
                 hdr_h,
                 &format!("{} ({}) — 16:9 HD", name, id),
             );
-            unsafe {
-                BitBlt(
-                    sheet.hdc(),
-                    x,
-                    y + hdr_h,
-                    cls_w,
-                    cls_h,
-                    tile.hdc(),
-                    0,
-                    0,
-                    ROP_SRCCOPY,
-                );
-            }
+            sheet.bit_blt_surface(x, y + hdr_h, cls_w, cls_h, &tile, 0, 0, ROP_SRCCOPY);
         }
         write_surface_png(&sheet, &snap_dir.join(format!("classic_hd_sheet_{}.png", si + 1)));
     }

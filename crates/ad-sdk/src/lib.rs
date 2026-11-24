@@ -1,20 +1,22 @@
-//! Modernized Win64 Rust SDK for After Dark 1.0a (1991).
+//! Linux Rust SDK for After Dark 1.0a (1991).
 //!
 //! Preserves 1:1 semantics with Berkeley Systems' original `ADMODULE.SDK`:
 //! - `MODULE.H` (`AD_SYSTEM`, `AD_MODULE`, control messages, error/palette codes)
 //! - `RES_IDS.H` (`AD_CONTROL` types 0..5, `AD_STRING` name/credit/about)
 //! - Microsoft C 6.0 `srand`/`rand` LCG (`MsvcRand`)
 //! - Exact 235-entry palettes (`HSV_PAL`, `RGB_PAL`, `WHITE_PAL`, `PRIMARY_PAL`) from `AD.EXE` SEG 13
-//! - Native Win32 GDI offscreen DIB canvas (`AdSurface`) with integer nearest-neighbor scaling
-//! - Win16 `SOUND.DRV` PC-speaker synthesizer (`AdSound`)
+//! - Pure-Rust software GDI canvas (`AdSurface`): ROP2/ROP3, regions, shapes, text, nearest-neighbor scaling
+//! - Win16 `SOUND.DRV` tones, PCM voices and SoundFont MIDI over PulseAudio/ALSA (`AdSound`)
 //! - 1:1 `AD_PREFS.INI` and `RANDOM.ADS` compatibility (`prefs`)
-//! - C-ABI dynamic `.dll` plugin support (`ffi`)
+//! - C-ABI dynamic `.so` plugin support (`ffi`)
+//! - Local time and keyboard-lock state shims replacing `GetLocalTime` / `GetKeyState` (`sys`)
 
 pub mod canvas;
 pub mod ffi;
 pub mod palette;
 pub mod prefs;
 pub mod sound;
+pub mod sys;
 
 use canvas::AdSurface;
 use palette::{AdPalette, AdPaletteKind};

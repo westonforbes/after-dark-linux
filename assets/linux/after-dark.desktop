@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=After Dark
+GenericName=Screen Saver
+Comment=Classic After Dark screen savers: Flying Toasters, The Simpsons, Star Trek, Looney Tunes
+Exec=after-dark
+Icon=after-dark
+Terminal=false
+Categories=Settings;DesktopSettings;
+Keywords=screensaver;toasters;flying toasters;
+StartupWMClass=after-dark

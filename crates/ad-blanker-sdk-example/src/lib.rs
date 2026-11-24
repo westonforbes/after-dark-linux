@@ -1,19 +1,18 @@
-//! Modernized Win64 port of Berkeley Systems' `ADMODULE.SDK\BLANKER\BLANKER.C` (1991).
+//! Linux port of Berkeley Systems' `ADMODULE.SDK\BLANKER\BLANKER.C` (1991).
 //!
 //! Demonstrates BOTH:
 //! 1. Implementing the Rust `ad_sdk::AdModule` trait
-//! 2. Exporting a Win64 C-ABI `.dll` plugin (`ad_module_entry_v1` / `ad_module_metadata_v1`)
-//!    mirroring `MODULE.C`'s `Module(iMessage, hDrawDC, hADSystem)` entry point.
+//! 2. Exporting a C-ABI `.so` plugin (`ad_module_entry_v2` / `ad_module_metadata_v2`)
+//!    mirroring `MODULE.C`'s `Module(iMessage, hDrawDC, hADSystem)` entry point, with the
+//!    draw target passed as an `AdCSurface` pixel buffer instead of an `HDC`.
 
 use std::ffi::c_int;
 
 use ad_sdk::ffi::{
-    AdCMetadata, AdCModuleState, MSG_BLANK, MSG_CLOSE, MSG_DRAWFRAME, MSG_INITIALIZE,
+    AD_ABI_VERSION, AdCMetadata, AdCModuleState, AdCSurface, MSG_BLANK, MSG_CLOSE, MSG_DRAWFRAME, MSG_INITIALIZE,
     MSG_PREINITIALIZE, RET_NOERROR,
 };
 use ad_sdk::{AdContext, AdControl, AdMetadata, AdModule, AdResult};
-use windows_sys::Win32::Foundation::RECT;
-use windows_sys::Win32::Graphics::Gdi::{BLACK_BRUSH, FillRect, GetStockObject, HBRUSH, HDC};
 
 pub struct BlankerModule;
 
@@ -59,14 +58,14 @@ impl AdModule for BlankerModule {
 }
 
 // ============================================================================
-// Modernized Win64 C-ABI DLL Exports (1:1 successor to MODULE.C / BLANKER.DEF)
+// C-ABI shared-library exports (1:1 successor to MODULE.C / BLANKER.DEF)
 // ============================================================================
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn ad_module_metadata_v1() -> AdCMetadata {
+pub unsafe extern "C" fn ad_module_metadata_v2() -> AdCMetadata {
     AdCMetadata {
-        abi_version: 1,
-        name: c"Blanker (SDK Sample DLL)".as_ptr(),
+        abi_version: AD_ABI_VERSION,
+        name: c"Blanker (SDK Sample Plugin)".as_ptr(),
         credit: c"Blanker by Bill Stewart.\r\n  \xA91990 Berkeley Systems Inc.".as_ptr(),
         about: c"BLANKER.\r\n\r\nNo snazzy graphics, all it does is blank your screen.".as_ptr(),
         target_frame_ms: 100,
@@ -74,27 +73,25 @@ pub unsafe extern "C" fn ad_module_metadata_v1() -> AdCMetadata {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn ad_module_entry_v1(
+pub unsafe extern "C" fn ad_module_entry_v2(
     message: c_int,
-    hdc: HDC,
+    surface: *mut AdCSurface,
     state: *mut AdCModuleState,
 ) -> c_int {
     if state.is_null() {
         return RET_NOERROR;
     }
-    let st = unsafe { &*state };
     match message {
         MSG_PREINITIALIZE | MSG_INITIALIZE | MSG_DRAWFRAME | MSG_CLOSE => RET_NOERROR,
         MSG_BLANK => {
-            if !hdc.is_null() {
-                let rc = RECT {
-                    left: 0,
-                    top: 0,
-                    right: st.rgn_width,
-                    bottom: st.rgn_height,
-                };
-                unsafe {
-                    FillRect(hdc, &rc, GetStockObject(BLACK_BRUSH) as HBRUSH);
+            // SAFETY: the host passes a valid surface describing a live pixel buffer.
+            if let Some(s) = unsafe { surface.as_ref() } {
+                if !s.pixels.is_null() && s.width > 0 && s.height > 0 && s.stride >= s.width {
+                    let len = (s.stride as usize) * (s.height as usize);
+                    let px = unsafe { std::slice::from_raw_parts_mut(s.pixels, len) };
+                    for row in px.chunks_mut(s.stride as usize) {
+                        row[..s.width as usize].fill(0);
+                    }
                 }
             }
             RET_NOERROR

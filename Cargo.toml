@@ -11,4 +11,4 @@ members = [
 version = "2.5.0"
 edition = "2024"
 license = "MIT"
-description = "After Dark v2.5 (77 Modules: Classic 1991 + The Simpsons + Star Trek: TNG + Looney Tunes) — 16:9 HD Widescreen & Animation Overhaul for Windows 11 in native Rust"
+description = "After Dark v2.5 (77 Modules: Classic 1991 + The Simpsons + Star Trek: TNG + Looney Tunes) for Linux in native Rust"

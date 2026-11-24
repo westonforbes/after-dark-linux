@@ -8,9 +8,3 @@ description = "1:1 decompiled After Dark 1.0a (1991) screensaver modules"
 [dependencies]
 ad-sdk = { path = "../ad-sdk" }
 ad-blanker-sdk-example = { path = "../ad-blanker-sdk-example" }
-windows-sys = { version = "0.59", features = [
-    "Win32_Foundation",
-    "Win32_Graphics_Gdi",
-    "Win32_System_SystemInformation",
-    "Win32_UI_Input_KeyboardAndMouse",
-] }

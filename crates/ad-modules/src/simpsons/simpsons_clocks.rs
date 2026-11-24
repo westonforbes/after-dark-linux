@@ -11,8 +11,7 @@
 //!   sucking pacifier, and toddling/tripping Maggie cameo beneath the clock!
 
 use ad_sdk::{AdContext, AdControl, AdMetadata, AdModule, AdResult};
-use windows_sys::Win32::Foundation::SYSTEMTIME;
-use windows_sys::Win32::System::SystemInformation::GetLocalTime;
+use ad_sdk::sys::SYSTEMTIME;
 
 use super::{
     MOD_SIMPSONS_CLOCKS, RlepBank, SND_BARNEY_YOHO, SND_DETONATE, SND_DOOR, SND_DUFF_BELCH,
@@ -813,11 +812,7 @@ impl AdModule for SimpsonsClocksModule {
 
     fn do_blank(&mut self, ctx: &mut AdContext<'_>) -> AdResult {
         self.draw_backdrop(ctx.surface);
-        let st = unsafe {
-            let mut s: SYSTEMTIME = std::mem::zeroed();
-            GetLocalTime(&mut s);
-            s
-        };
+        let st = ad_sdk::sys::local_time();
         self.render_clock(ctx.surface, &st);
         AdResult::NoError
     }
@@ -826,11 +821,7 @@ impl AdModule for SimpsonsClocksModule {
         self.tick = self.tick.wrapping_add(1);
         let pack = SimpsonsPack::global();
 
-        let st = unsafe {
-            let mut s: SYSTEMTIME = std::mem::zeroed();
-            GetLocalTime(&mut s);
-            s
-        };
+        let st = ad_sdk::sys::local_time();
 
         let do_ticks = self.sound_mode == 0 || self.sound_mode == 2;
         let do_chimes = self.sound_mode == 0 || self.sound_mode == 1;

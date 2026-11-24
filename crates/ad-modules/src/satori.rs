@@ -14,7 +14,6 @@
 //! - Supports the original 1991 Caps Lock Easter egg (toggling Caps Lock flips palettes live).
 
 use ad_sdk::{AdContext, AdControl, AdMetadata, AdModule, AdResult};
-use windows_sys::Win32::UI::Input::KeyboardAndMouse::GetKeyState;
 
 const PAL_LEN: usize = 234; // 0xEA
 const HALF_PAL: usize = 117; // 0x75
@@ -1032,7 +1031,7 @@ impl SatoriModule {
     }
 
     fn check_caps_lock_flip(&mut self, ctx: &mut AdContext<'_>) {
-        let state = unsafe { GetKeyState(0x14) } & 1;
+        let state = i16::from(ad_sdk::sys::caps_lock_on());
         if state != self.caps_lock_state {
             self.caps_lock_state = state;
             self.rebuild_palette(ctx);
@@ -1050,7 +1049,7 @@ impl AdModule for SatoriModule {
         self.height = ctx.module.rgn_height.max(1);
         self.indices.clear();
         self.indices.resize((self.width * self.height) as usize, 0);
-        self.caps_lock_state = unsafe { GetKeyState(0x14) } & 1;
+        self.caps_lock_state = i16::from(ad_sdk::sys::caps_lock_on());
 
         ctx.surface.fill_black();
         self.setup_field(ctx, true);
